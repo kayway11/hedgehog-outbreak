@@ -147,8 +147,25 @@ function createHUD() {
   hud.innerHTML = `
     <div class="hud-room" id="hudRoom">Room: —</div>
     <div class="hud-top" id="hudInfo">Move with joystick or WASD</div>
+    <button class="fs-btn" id="fsBtn">⛶ Fullscreen</button>
   `;
   document.body.appendChild(hud);
+
+  const fsBtn = document.getElementById('fsBtn');
+  fsBtn.onclick = () => {
+    const el = document.documentElement;
+    if (!document.fullscreenElement) {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else {
+        alert('Fullscreen not supported in this browser. On iPhone, try tapping aA → Request Desktop Website, or rotate your phone to landscape.');
+      }
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
 }
 
 function createJoystick() {
