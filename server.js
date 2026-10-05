@@ -3,17 +3,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import {
-  createRoom,
-  getRoom,
-  joinRoom,
-  removePlayer,
-  allRooms,
-  listPublicRooms,
-  setRoomVisibility,
-  publicState,
-  touchRoom,
-} from './rooms.js';
+import * as Rooms from './rooms.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,39 +13,36 @@ const publicPath = path.join(__dirname, 'public');
 app.use(express.static(publicPath));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(publicPath,.code;
-    'index.html'));
- if});
+  res.sendFile(path.join(publicPath, 'index.html'));
+});
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 const COUNTDOWN_SECONDS = 15;
-const countdownTimers = new Map(); // code -> setTimeout id
+const countdownTimers = new Map();
 
 function broadcast(room) {
   room.players.forEach((p) => {
-    io.to(p.id).emit('state', publicState(room, p.id));
+    io.to(p.id).emit('state', Rooms.publicState(room, p.id));
   });
 }
 
 function broadcastWorld(room) {
   room.players.forEach((p) => {
-    io.to(p.id).emit('world', publicState(room, p.id));
+    io.to(p.id).emit('world', Rooms.publicState(room, p.id));
   });
 }
 
 function broadcastRoomList() {
-  io.emit('room_list', listPublicRooms());
+  io.emit('room_list', Rooms.listPublicRooms());
 }
 
 io.on('connection', (socket) => {
-  // Send initial public room list to this socket
-  socket.emit('room_list', listPublicRooms());
+  socket.emit('room_list', Rooms.listPublicRooms());
 
-  // --- Create room ---
   socket.on('create_room', ({ name, isPublic }, cb) => {
-    const room = createRoom(socket.id, name || 'Hedgehog', isPublic);
+    const room = Rooms.createRoom(socket.id, name || 'Hedgehog', isPublic);
     socket.join(socket.id);
     socket.data.code = room.code;
     cb?.({ ok: true, code: room.code });
@@ -63,49 +50,44 @@ io.on('connection', (socket) => {
     broadcastRoomList();
   });
 
-  // --- Join by code ---
   socket.on('join_room', ({ code, name }, cb) => {
-    const result = joinRoom(code?.toUpperCase(), socket.id, name || 'Hedgehog');
+    const result = Rooms.joinRoom(code?.toUpperCase(), socket.id, name || 'Hedgehog');
     if (result.error) return cb?.({ ok: false, error: result.error });
     socket.join(socket.id);
     socket.data.code = result.room.code;
-    touchRoom(result.room);
+    Rooms.touchRoom(result.room);
     cb?.({ ok: true, code: result.room.code });
     broadcast(result.room);
     broadcastRoomList();
   });
 
-  // --- Join public room from list ---
   socket.on('join_public', ({ code, name }, cb) => {
-    const result = joinRoom(code?.toUpperCase(), socket.id, name || 'Hedgehog');
+    const result = Rooms.joinRoom(code?.toUpperCase(), socket.id, name || 'Hedgehog');
     if (result.error) return cb?.({ ok: false, error: result.error });
     socket.join(socket.id);
     socket.data.code = result.room.code;
-    touchRoom(result.room);
+    Rooms.touchRoom(result.room);
     cb?.({ ok: true, code: result.room.code });
     broadcast(result.room);
     broadcastRoomList();
   });
 
-  // --- Toggle room visibility ---
   socket.on('set_visibility', ({ code, isPublic }, cb) => {
-    const room = getRoom(code);
+    const room = Rooms.getRoom(code);
     if (!room) return cb?.({ ok: false });
     if (room.hostId !== socket.id) return cb?.({ ok: false, error: 'Not host' });
-    setRoomVisibility(code, isPublic);
+    Rooms.setRoomVisibility(code, isPublic);
     cb?.({ ok: true });
     broadcast(room);
     broadcastRoomList();
   });
 
-  // --- Request room list ---
   socket.on('request_rooms', () => {
-    socket.emit('room_list', listPublicRooms());
+    socket.emit('room_list', Rooms.listPublicRooms());
   });
 
-  // --- Start game (host) ---
   socket.on('start_game', ({ code }, cb) => {
-    const room = getRoom(code);
+    const room = Rooms.getRoom(code);
     if (!room) return cb?.({ ok: false, error: 'No room' });
     if (room.hostId !== socket.id) return cb?.({ ok: false, error: 'Not host' });
     if (room.players.length < 1) return cb?.({ ok: false, error: 'Need players' });
@@ -118,9 +100,8 @@ io.on('connection', (socket) => {
     broadcastWorld(room);
     broadcastRoomList();
 
-    // after countdown → play
     const timer = setTimeout(() => {
-      const r = getRoom(code);
+      const r = Rooms.getRoom(code);
       if (!r) return;
       r.phase = 'play';
       r.countdownEndsAt = null;
@@ -133,9 +114,8 @@ io.on('connection', (socket) => {
     countdownTimers.set(code, timer);
   });
 
-  // --- Cancel countdown (host changed mind) ---
   socket.on('cancel_start', ({ code }) => {
-    const room = getRoom(code);
+    const room = Rooms.getRoom(code);
     if (!room) return;
     if (room.hostId !== socket.id) return;
     const t = countdownTimers.get(code);
@@ -148,10 +128,10 @@ io.on('connection', (socket) => {
     broadcastRoomList();
   });
 
-  // --- Movement ---
   socket.on('move', ({ x, y, z, rotY }) => {
-    const code = socket.data (!code) return;
-    const room = getRoom(code);
+    const code = socket.data.code;
+    if (!code) return;
+    const room = Rooms.getRoom(code);
     if (!room) return;
     const player = room.players.find((p) => p.id === socket.id);
     if (!player) return;
@@ -162,32 +142,26 @@ io.on('connection', (socket) => {
     broadcastWorld(room);
   });
 
-  // --- Leave room ---
   socket.on('leave_room', () => {
     const code = socket.data.code;
     if (!code) return;
-    const room = getRoom(code);
+    const room = Rooms.getRoom(code);
     if (!room) return;
-    const wasHost = room.hostId === socket.id;
-    removePlayer(code, socket.id);
+    Rooms.removePlayer(code, socket.id);
     socket.data.code = null;
-    const updated = getRoom(code);
+    const updated = Rooms.getRoom(code);
     if (updated) {
       broadcast(updated);
       broadcastWorld(updated);
     }
     broadcastRoomList();
-    if (wasHost && !updated) {
-      // room gone
-    }
   });
 
-  // --- Disconnect ---
   socket.on('disconnect', () => {
-    allRooms().forEach((room) => {
+    Rooms.allRooms().forEach((room) => {
       if (room.players.find((p) => p.id === socket.id)) {
-        removePlayer(room.code, socket.id);
-        const updated = getRoom(room.code);
+        Rooms.removePlayer(room.code, socket.id);
+        const updated = Rooms.getRoom(room.code);
         if (updated) {
           broadcast(updated);
           broadcastWorld(updated);
