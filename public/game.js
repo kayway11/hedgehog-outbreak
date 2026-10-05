@@ -142,8 +142,160 @@ export function initGame(socketRef) {
 
   // ---- HUD ----
   createHUD();
-  createJoystick();
-  createLookPad();
+  function createJoystick() {
+  const base = document.createElement('div');
+  base.className = 'joystick-base';
+  const stick = document.createElement('div');
+  stick.className = 'joystick-stick';
+  base.appendChild(stick);
+  document.body.appendChild(base);
+
+  let joyTouchId = null;
+  let centerX = 0;
+  let centerY = 0;
+  const maxDist = 40;
+
+  const start = (e) => {
+    for (const t of e.changedTouches) {
+      if (joyTouchId === null) {
+        joyTouchId = t.identifier;
+        const rect = base.getBoundingClientRect();
+        centerX = rect.left + rect.width / 2;
+        centerY = rect.top + rect.height / 2;
+        handleMove(t);
+      }
+    }
+  };
+  const handleMove = (t) => {
+    const dx = t.clientX - centerX;
+    const dy = t.clientY - centerY;
+    const dist = Math.min(Math.sqrt(dx * dx + dy * dy), maxDist);
+    const angle = Math.atan2(dy, dx);
+    const sx = Math.cos(angle) * dist;
+    const sy = Math.sin(angle) * dist;
+    stick.style.transform = `translate(calc(-50% + ${sx}px), calc(-50% + ${sy}px))`;
+    joystickInput.x = sx / maxDist;
+    joystickInput.y = -sy / maxDist;
+  };
+  const move = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) {
+        handleMove(t);
+        e.preventDefault();
+      }
+    }
+  };
+  const end = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) {
+        joyTouchId = null;
+        stick.style.transform = 'translate(-50%, -50%)';
+        joystickInput.x = 0;
+        joystickInput.y = 0;
+      }
+    }
+  };
+
+  base.addEventListener('touchstart', start, { passive: false });
+  base.addEventListener('touchmove', move, { passive: false });
+  base.addEventListener('touchend', end);
+  base.addEventListener('touchcancel', end);
+
+  // Desktop fallback
+  let mouseActive = false;
+  base.addEventListener('mousedown', (e) => {
+    mouseActive = true;
+    const rect = base.getBoundingClientRect();
+    centerX = rect.left + rect.width / 2;
+    centerY = rect.top + rect.height / 2;
+    handleMove({ clientX: e.clientX, clientY: e.clientY });
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (mouseActive) handleMove(e);
+  });
+  window.addEventListener('mouseup', () => {
+    if (mouseActive) {
+      mouseActive = false;
+      stick.style.transform = 'translate(-50%, -50%)';
+      joystickInput.x = 0;
+      joystickInput.y = 0;
+    }
+  });
+};
+  function createLookPad() {
+  const pad = document.createElement('div');
+  pad.className = 'look-pad';
+  document.body.appendChild(pad);
+
+  let lookTouchId = null;
+  let lastX = 0;
+  let lastY = 0;
+
+  const start = (e) => {
+    for (const t of e.changedTouches) {
+      if (lookTouchId === null) {
+        lookTouchId = t.identifier;
+        lastX = t.clientX;
+        lastY = t.clientY;
+      }
+    }
+  };
+  const move = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === lookTouchId) {
+        const dx = t.clientX - lastX;
+        const dy = t.clientY - lastY;
+        lastX = t.clientX;
+        lastY = t.clientY;
+        cameraYaw -= dx * 0.005;
+        cameraPitch -= dy * 0.004;
+        cameraPitch = Math.max(-1.2, Math.min(1.2, cameraPitch));
+        e.preventDefault();
+      }
+    }
+  };
+  const end = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === lookTouchId) lookTouchId = null;
+    }
+  };
+
+  pad.addEventListener('touchstart', start, { passive: false });
+  pad.addEventListener('touchmove', move, { passive: false });
+  pad.addEventListener('touchend', end);
+  pad.addEventListener('touchcancel', end);
+
+  // Desktop
+  let mouseDown = false;
+  pad.addEventListener('mousedown', (e) => {
+    mouseDown = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (mouseDown) {
+      cameraYaw -= (e.clientX - lastX) * 0.005;
+      cameraPitch -= (e.clientY - lastY) * 0.004;
+      cameraPitch = Math.max(-1.2, Math.min(1.2, cameraPitch));
+      lastX = e.clientX;
+      lastY = e.clientY;
+    }
+  });
+  window.addEventListener('mouseup', () => (mouseDown = false));
+
+  document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement === renderer.domElement) {
+      cameraYaw -= e.movementX * 0.002;
+      cameraPitch -= e.movementY * 0.002;
+      cameraPitch = Math.max(-1.2, Math.min(1.2, cameraPitch));
+    }
+  });
+  renderer.domElement.addEventListener('click', () => {
+    if (window.matchMedia('(pointer: fine)').matches) {
+      renderer.domElement.requestPointerLock?.();
+    }
+  });
+};
 
   window.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
