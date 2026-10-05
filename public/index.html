@@ -3,11 +3,115 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0f0f14" />
   <title>🦔 HEDGEHOG: OUTBREAK</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div id="app"></div>
+  <!-- Home / Rooms screen -->
+  <div id="home" class="home-screen">
+    <button class="how-to-btn" id="howToBtn">📖 How to Play</button>
+
+    <div class="home-hero">
+      <h1 class="hero-title">🦔 HEDGEHOG</h1>
+      <p class="hero-sub">OUTBREAK</p>
+    </div>
+
+    <div class="home-card">
+      <label class="field-label">Your name</label>
+      <input class="input" id="nameInput" maxlength="16" placeholder="Enter your name" />
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="createBtn">Create Room</button>
+        <button class="btn btn-ghost" id="joinPublicBtn">Join Public Room</button>
+        <button class="btn btn-ghost" id="joinCodeBtn">Join by Code</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- How to Play modal -->
+  <div id="howToModal" class="modal hidden">
+    <div class="modal-content">
+      <button class="modal-close" id="howToClose">✕</button>
+      <h2 class="modal-title">📖 How to Play</h2>
+      <div class="modal-body">
+        <h3>🎯 The Goal</h3>
+        <p>One player is secretly <b>Infected</b>. Survivors complete missions and escape. The Infected spreads the virus.</p>
+
+        <h3>🕹️ Controls</h3>
+        <p><b>Move:</b> left joystick or WASD<br/>
+           <b>Look:</b> drag the right side of the screen, or move your mouse<br/>
+           <b>Sprint:</b> hold Shift (desktop)</p>
+
+        <h3>👥 Players</h3>
+        <p>4–10 players. Join by room code, or find public rooms.</p>
+
+        <h3>🦠 Infection</h3>
+        <p>Infected hedgehogs infect others by touching them. Newly infected become hunters too.</p>
+
+        <h3>🎯 Missions</h3>
+        <p>5 mission stations. Complete them to fill the escape bar to 100%. Reach it → Survivors win.</p>
+
+        <h3>🗳️ Meetings & Voting</h3>
+        <p>Report a body or use an Emergency Button to gather everyone. Discuss, then vote. Majority vote ejects.</p>
+
+        <h3>🏆 Winning</h3>
+        <p><b>Survivors win</b> if the escape bar fills, time runs out with survivors alive, or the Infected is voted out.<br/>
+           <b>Infected wins</b> if all Survivors are infected.</p>
+
+        <h3>⏱️ Rounds</h3>
+        <p>6-minute rounds. Scores accumulate across rounds.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Public Room modal -->
+  <div id="publicModal" class="modal hidden">
+    <div class="modal-content">
+      <button class="modal-close" id="publicClose">✕</button>
+      <h2 class="modal-title">🌐 Public Rooms</h2>
+      <div id="publicList" class="room-list">
+        <p class="muted center">Loading rooms…</p>
+      </div>
+      <button class="btn btn-ghost" id="publicRefresh" style="margin-top:12px;">🔄 Refresh</button>
+    </div>
+  </div>
+
+  <!-- Join by Code modal -->
+  <div id="codeModal" class="modal hidden">
+    <div class="modal-content">
+      <button class="modal-close" id="codeClose">✕</button>
+      <h2 class="modal-title">🔑 Join by Code</h2>
+      <p class="muted">Enter the 4-letter room code</p>
+      <input class="input code-input" id="codeInput" maxlength="4" placeholder="CODE" />
+      <button class="btn btn-primary" id="codeSubmit">Join</button>
+    </div>
+  </div>
+
+  <!-- Create Room modal -->
+  <div id="createModal" class="modal hidden">
+    <div class="modal-content">
+      <button class="modal-close" id="createClose">✕</button>
+      <h2 class="modal-title">✨ Create Room</h2>
+      <label class="field-label">Visibility</label>
+      <div class="toggle-row">
+        <button class="toggle-btn active" id="privBtn" data-public="false">🔒 Private</button>
+        <button class="toggle-btn" id="pubBtn" data-public="true">🌐 Public</button>
+      </div>
+      <p class="muted" style="margin-top:12px;" id="visibilityHint">Only players with the code can join.</p>
+      <button class="btn btn-primary" id="createConfirm" style="margin-top:16px;">Create Room</button>
+    </div>
+  </div>
+
+  <!-- Countdown overlay -->
+  <div id="countdownOverlay" class="countdown-overlay hidden">
+    <div class="countdown-num" id="countdownNum">15</div>
+    <div class="countdown-label">Game starting…</div>
+  </div>
+
+  <!-- 3D game viewport -->
   <div id="game" style="display:none;"></div>
 
   <script type="importmap">
