@@ -2,105 +2,187 @@ const socket = io();
 
 let state = null;
 let myName = '';
-let myCode = '';
+let roomList = [];
 let inGame = false;
+let countdownInterval = null;
 
-const app = document.getElementById('app');
+// ---------- DOM ----------
+const homeEl = document.getElementById('home');
+const gameEl = document.getElementById('game');
+const nameInput = document.getElementById('nameInput');
+const howToModal = document.getElementById('howToModal');
+const publicModal = document.getElementById('publicModal');
+const codeModal = document.getElementById('codeModal');
+const createModal = document.getElementById('createModal');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const countdownNum = document.getElementById('countdownNum');
 
+// ---------- MODALS ----------
+function openModal(m) { m.classList.remove('hidden'); }
+function closeModal(m) { m.classList.add('hidden'); }
+function closeAllModals() {
+  [howToModal, publicModal, codeModal, createModal].forEach(closeModal);
+}
+
+document.getElementById('howToBtn').onclick = () => openModal(howToModal);
+document.getElementById('howToClose').onclick = () => closeModal(howToModal);
+document.getElementById('publicClose').onclick = () => closeModal(publicModal);
+document.getElementById('codeClose').onclick = () => closeModal(codeModal);
+document.getElementById('createClose').onclick = () => closeModal(createModal);
+
+// Name is saved and restored
+nameInput.oninput = () => {
+  myName = nameInput.value;
+  try { localStorage.setItem('hedgehog_name', myName); } catch (e) {}
+};
+try {
+  const saved = localStorage.getItem('hedgehog_name');
+  if (saved) { myName = saved; nameInput.value = saved; }
+} catch (e) {}
+
+// ---------- CREATE FLOW ----------
+let createIsPublic = false;
+
+document.getElementById('createBtn').onclick = () => {
+  if (!myName.trim()) return alert('Enter a name first');
+  openModal(createModal);
+};
+
+document.getElementById('privBtn').onclick = () => {
+  createIsPublic = false;
+  document.getElementById('privBtn').classList.add('active');
+  document.getElementById('pubBtn').classList.remove('active');
+  document.getElementById('visibilityHint').textContent = 'Only players with the code can join.';
+};
+
+document.getElementById('pubBtn').onclick = () => {
+  createIsPublic = true;
+  document.getElementById('pubBtn').classList.add('active');
+  document.getElementById('privBtn').classList.remove('active');
+  document.getElementById('visibilityHint').textContent = 'Anyone can find and join this room from the public list.';
+};
+
+document.getElementById('createConfirm').onclick = () => {
+  closeModal(createModal);
+  socket.emit('create_room', { name: myName.trim(), isPublic: createIsPublic }, (res) => {
+    if (!res?.ok) alert(res?.error || 'Could not create room');
+  });
+};
+
+// ---------- JOIN PUBLIC FLOW ----------
+document.getElementById('joinPublicBtn').onclick = () => {
+  if (!myName.trim()) return alert('Enter a name first');
+  openModal(publicModal);
+  socket.emit('request_rooms');
+};
+
+document.getElementById('publicRefresh').onclick = () => {
+  socket.emit('request_rooms');
+};
+
+// ---------- JOIN CODE FLOW ----------
+document.getElementById('joinCodeBtn').onclick = () => {
+  if (!myName.trim()) return alert('Enter a name first');
+  openModal(codeModal);
+  setTimeout(() => document.getElementById('codeInput').focus(), 100);
+};
+
+document.getElementById('codeSubmit').onclick = () => {
+  const code = document.getElementById('codeInput').value.trim().toUpperCase();
+  if (code.length !== 4) return alert('Enter a 4-letter code');
+  socket.emit('join_room', { code, name: myName.trim() }, (res) => {
+    if (!res?.ok) alert(res.error || 'Could not join');
+    else closeModal(codeModal);
+  });
+};
+
+// ---------- SOCKET EVENTS ----------
 socket.on('state', (s) => {
   state = s;
-  if (!myCode && s.code) myCode = s.code;
 
-  if (s.phase === 'play' && !inGame) {
+  // If we just entered the lobby, hide the home screen and show 3D
+  if (!inGame) {
     inGame = true;
+    homeEl.style.display = 'none';
+    gameEl.style.display = 'block';
     import('/game.js').then((mod) => {
-      mod.initGame(socket, socket.id);
-      const hudRoom = document.getElementById('hudRoom');
-      if (hudRoom) hudRoom.textContent = 'Room: ' + s.code;
+      mod.initGame(socket);
     });
-    return;
   }
-
-  if (!inGame) renderHome();
 });
 
-renderHome();
+socket.on('room_list', (list) => {
+  roomList = list || [];
+  renderPublicList();
+});
 
-function renderHome() {
-  app.style.display = 'block';
-  document.getElementById('game').style.display = 'none';
+function renderPublicList() {
+  const listEl = document.getElementById('publicList');
+  if (!listEl) return;
 
-  if (!state) {
-    app.innerHTML = `
-      <div style="text-align:center;margin-top:40px;margin-bottom:24px;">
-        <h1 style="font-size:32px;color:#ff4d6d;margin-bottom:8px;">🦔 OUTBREAK</h1>
-        <p class="muted">3D infection party game</p>
-      </div>
-      <div class="panel">
-        <label class="muted">Your name</label>
-        <input class="input" id="nameInput" maxlength="16" placeholder="Enter name" />
-        <button class="btn btn-primary" id="createBtn" style="margin-bottom:12px;">Create room</button>
-        <div style="text-align:center;opacity:.5;font-size:12px;margin:12px 0;">— or join —</div>
-        <input class="input" id="codeInput" maxlength="4" placeholder="CODE" style="text-transform:uppercase;text-align:center;font-family:monospace;font-size:20px;letter-spacing:4px;" />
-        <button class="btn btn-ghost" id="joinBtn" style="width:100%;">Join</button>
-      </div>
-    `;
-    document.getElementById('nameInput').oninput = (e) => (myName = e.target.value);
-    document.getElementById('createBtn').onclick = () => {
-      if (!myName.trim()) return alert('Enter a name');
-      socket.emit('create_room', { name: myName.trim() });
-    };
-    document.getElementById('joinBtn').onclick = () => {
-      const code = document.getElementById('codeInput').value.trim().toUpperCase();
-      if (!myName.trim()) return alert('Enter a name');
-      if (code.length !== 4) return alert('4-letter code required');
-      socket.emit('join_room', { code, name: myName.trim() }, (res) => {
-        if (!res.ok) alert(res.error || 'Could not join');
-      });
-    };
+  if (!roomList.length) {
+    listEl.innerHTML = '<p class="muted center" style="padding:20px;">No public rooms right now.<br/>Create one and make it public!</p>';
     return;
   }
 
-  if (state.phase === 'lobby') return renderLobby();
-  app.innerHTML = `<p class="center muted">Loading…</p>`;
-}
-
-function renderLobby() {
-  const me = state.players.find((p) => p.isYou);
-  const isHost = me && me.id === state.hostId;
-  const canStart = state.players.length >= 1;
-
-  app.innerHTML = `
-    <div class="panel center">
-      <p class="muted">Share this code</p>
-      <div class="code-display">${state.code}</div>
-      <p class="muted">${state.players.length}/10 players</p>
+  listEl.innerHTML = roomList.map((r) => `
+    <div class="room-item" data-code="${r.code}">
+      <div>
+        <div class="room-code">${r.code}</div>
+        <div class="room-host">Host: ${escapeHtml(r.hostName)}</div>
+      </div>
+      <div class="room-count">${r.playerCount}/${r.maxPlayers}</div>
     </div>
-    <div class="panel">
-      <h3>Players</h3>
-      <ul class="player-list">
-        ${state.players.map((p) => `
-          <li class="${p.isYou ? 'you' : ''}">
-            <span>${escapeHtml(p.name)}${p.id === state.hostId ? '<span class="badge host">HOST</span>' : ''}</span>
-            ${p.isYou ? '<span class="muted">you</span>' : ''}
-          </li>
-        `).join('')}
-      </ul>
-    </div>
-    ${isHost
-      ? `<button class="btn btn-primary" id="startBtn" ${!canStart ? 'disabled' : ''}>${canStart ? 'Start game' : 'Need 1+ players'}</button>`
-      : `<p class="center muted">Waiting for host…</p>`}
-  `;
+  `).join('');
 
-  if (isHost) {
-    document.getElementById('startBtn').onclick = () => {
-      socket.emit('start_game', { code: state.code }, (res) => {
-        if (!res?.ok) alert(res?.error || 'Cannot start');
+  listEl.querySelectorAll('.room-item').forEach((el) => {
+    el.onclick = () => {
+      const code = el.dataset.code;
+      closeModal(publicModal);
+      socket.emit('join_public', { code, name: myName.trim() }, (res) => {
+        if (!res?.ok) alert(res.error || 'Could not join');
       });
     };
+  });
+}
+
+// ---------- COUNTDOWN OVERLAY ----------
+socket.on('state', () => {
+  if (!state) return;
+  updateCountdown();
+});
+
+function updateCountdown() {
+  if (!state) return;
+  if (state.phase === 'countdown' && state.countdownEndsAt) {
+    countdownOverlay.classList.remove('hidden');
+    if (!countdownInterval) {
+      countdownInterval = setInterval(() => {
+        if (!state || state.phase !== 'countdown') {
+          countdownOverlay.classList.add('hidden');
+          clearInterval(countdownInterval);
+          countdownInterval = null;
+          return;
+        }
+        const remaining = Math.max(0, Math.ceil((state.countdownEndsAt - Date.now()) / 1000));
+        countdownNum.textContent = remaining;
+      }, 100);
+    }
+  } else {
+    countdownOverlay.classList.add('hidden');
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      countdownInterval = null;
+    }
   }
 }
 
+// Make sure we get a state update when the socket reconnects
+socket.on('connect', () => {
+  socket.emit('request_rooms');
+});
+
+// ---------- UTIL ----------
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
